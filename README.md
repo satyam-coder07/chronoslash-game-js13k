@@ -1,0 +1,36 @@
+# CHRONO-SLASH
+
+Chrono-Slash is a top-down, time-manipulation arena survival game engineered specifically for the JS13k competition. The entire game, including engine logic, artificial intelligence, rendering, and audio synthesis, is contained within a single HTML file and compiles down to approximately 5 KB when packed and zipped. It relies on zero external assets, utilizing pure vanilla JavaScript, the HTML5 Canvas 2D API, and the Web Audio API.
+
+## Core Engine & Time Dilation Physics
+
+The defining mechanic of the game is time manipulation, governed by a custom physics loop that decouples real-time input from simulation time. 
+
+The game relies on `requestAnimationFrame` to calculate a raw `deltaTime`. The engine computes a global `timeScale` multiplier based on player input state. When the player inputs movement (WASD or Arrow keys) or initiates a dash, the `timeScale` interpolates rapidly to 1.0 (real-time). When input ceases, the `timeScale` interpolates down to 0.05, creating an extreme slow-motion state.
+
+Every entity in the simulation (enemies, bullets, particles, background elements) multiplies its velocity and animation timers by `scaledDeltaTime` (`deltaTime * timeScale`). The player's rotation (mouse tracking) and dash cooldowns evaluate against raw `deltaTime`, allowing the player to look around and plan attacks while the world is frozen.
+
+## Enemy Artificial Intelligence (Steering Behaviors)
+
+To prevent the enemies from collapsing into a single overlap point (a common flaw in naive vector-tracking AI), the enemy update loop utilizes composite steering behaviors.
+
+1.  **Orbital Kiting:** Enemies calculate a distance vector to the player. If the distance exceeds a randomly assigned `orbitRadius`, the enemy applies an approach vector. Once within the radius, the AI calculates a tangent vector to circle-strafe the player. A radial error correction factor is applied to push or pull the enemy to maintain the exact orbital distance while firing projectiles inward.
+2.  **Boid Separation:** A secondary pass loops through all active enemies to enforce spatial distancing. If the distance between any two drones falls below the `SEPARATION_RADIUS` (40 pixels), a normalized repulsion vector is generated. This force scales inversely with distance and is added to the enemy's final velocity vector, forcing the horde to fan out into tactical formations.
+
+## Procedural Animation & Rendering Graphics
+
+To meet the strict 13 KB limit, the game uses zero image files. All visual elements are generated procedurally through the Canvas 2D API using geometric primitives and complex gradients.
+
+*   **Ghost Trails (Motion Blur):** The canvas is never fully cleared using `clearRect`. Instead, the loop fills the screen with `rgba(0, 0, 0, 0.32)` every frame. Previous frame renders persist and fade gradually, creating native motion blur and light trails behind moving objects.
+*   **Neon Bloom:** Native canvas glow is achieved by setting `ctx.shadowColor` and `ctx.shadowBlur` before executing stroke or fill commands.
+*   **Player Geometry:** The cyber-blade ship is drawn using `beginPath` with specific vector coordinates. The metallic sheen is simulated using `createLinearGradient` spanning the hull. The engine exhaust is rendered as a quadratic curve that scales its length dynamically based on the current player velocity.
+*   **Enemy Geometry:** The Hunter Drones are rendered in two distinct layers. The outer chassis is a spiked ring created using `Math.cos` and `Math.sin` inside a loop, utilizing an alternating radius. This chassis rotates at a constant speed independent of the enemy's movement trajectory. The core is a fixed `createRadialGradient` that scales its brightness using a sine wave bound to elapsed time, creating a pulsing "eye."
+*   **Dash-Slash Rendering:** When the player dashes, the starting and ending vectors are stored. The engine calculates the distance (`Math.hypot`) and angle (`Math.atan2`) of the dash. It translates and rotates the canvas context to draw a thick, capsule-shaped polygon using a linear gradient that fades from a pure white core to transparent cyan edges.
+*   **Parallax Data Rain:** The background consists of procedural falling code blocks. These are managed as arrays of vertical coordinates and speeds. Their downward velocity is multiplied by the global `timeScale`, meaning the background rain physically slows down when the player enters chrono-lock.
+
+## Generative Audio Synthesis
+
+All sound effects and ambient tracks are synthesized at runtime using the Web Audio API. 
+
+*   **Dynamic Background Drone:** Two `OscillatorNode` instances (a sawtooth and a sine wave) run continuously through a `BiquadFilterNode`. The frequency of both the oscillators and the low-pass filter are dynamically bound to the `timeScale`. When time slows down, the frequency drops, creating a deep, distorted acoustic time-warp effect.
+*   **Sound Effects:** Explosions and sword slashes are generated by filling an `AudioBuffer` with randomized float values to create white noise. This noise is then routed through high-pass and low-pass filters with exponential frequency ramps (`exponentialRampToValueAtTime`) to shape the sound into sharp metallic slices or heavy bass thumps.
